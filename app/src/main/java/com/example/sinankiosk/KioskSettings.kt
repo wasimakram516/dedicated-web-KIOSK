@@ -1,6 +1,7 @@
 package com.example.sinankiosk
 
 import android.content.Context
+import android.util.Log
 import java.net.URI
 import java.security.MessageDigest
 import java.security.SecureRandom
@@ -15,10 +16,18 @@ data class KioskConfiguration(
 }
 
 class KioskSettings(context: Context) {
-    private val preferences = context.getSharedPreferences(
-        PREFERENCES_NAME,
-        Context.MODE_PRIVATE
-    )
+    private val appContext = context.applicationContext
+    private val storageContext = appContext.createDeviceProtectedStorageContext()
+    private val preferences by lazy {
+        storageContext.getSharedPreferences(
+            PREFERENCES_NAME,
+            Context.MODE_PRIVATE
+        )
+    }
+
+    init {
+        migrateLegacyPreferencesIfRequired()
+    }
 
     fun loadConfiguration(): KioskConfiguration = KioskConfiguration(
         domain = preferences.getString(KEY_DOMAIN, "").orEmpty(),
@@ -75,7 +84,28 @@ class KioskSettings(context: Context) {
         return hashPin(pin, salt) == storedHash
     }
 
+    private fun migrateLegacyPreferencesIfRequired() {
+        val deviceProtectedPreferences = storageContext.getSharedPreferences(
+            PREFERENCES_NAME,
+            Context.MODE_PRIVATE
+        )
+        if (deviceProtectedPreferences.all.isNotEmpty()) {
+            return
+        }
+
+        runCatching {
+            storageContext.moveSharedPreferencesFrom(appContext, PREFERENCES_NAME)
+        }.onFailure { throwable ->
+            Log.w(
+                TAG,
+                "Failed to migrate kiosk settings to device-protected storage",
+                throwable
+            )
+        }
+    }
+
     companion object {
+        private const val TAG = "KioskSettings"
         private const val PREFERENCES_NAME = "kiosk_settings"
         private const val KEY_DOMAIN = "domain"
         private const val KEY_PIN_HASH = "pin_hash"
