@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">Sinan KIOSK</string>
+    <string name="device_admin_description">Allows this app to run as a dedicated-device kiosk controller.</string>
+    <string name="error_domain_required">Enter a valid http(s) domain.</string>
+    <string name="error_pin_required">Enter a PIN.</string>
+    <string name="error_pin_format">PIN must be at least 4 digits and numbers only.</string>
+    <string name="error_pin_mismatch">PIN entries do not match.</string>
+</resources>
