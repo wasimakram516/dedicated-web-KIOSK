@@ -43,19 +43,19 @@ internal fun buildKioskPlaceholderHtml(uiState: MainUiState): String {
           <title>Kiosk Standby</title>
           <style>
             :root {
-              color-scheme: dark;
-              --bg-1: #071018;
-              --bg-2: #0d1721;
-              --panel: rgba(17, 25, 34, 0.92);
-              --panel-strong: rgba(20, 31, 42, 0.96);
-              --border: rgba(132, 160, 181, 0.16);
-              --text: #f2f6fa;
-              --muted: #9cb0bf;
-              --accent: #1ea7a1;
-              --accent-soft: rgba(30, 167, 161, 0.14);
-              --success: #33b078;
-              --warning: #f0b24e;
-              --shadow: 0 22px 60px rgba(0, 0, 0, 0.28);
+              color-scheme: light;
+              --bg-1: #f4f8fc;
+              --bg-2: #e7eff7;
+              --panel: rgba(255, 255, 255, 0.94);
+              --panel-strong: rgba(255, 255, 255, 0.98);
+              --border: rgba(144, 166, 188, 0.22);
+              --text: #13212e;
+              --muted: #627487;
+              --accent: #0d94a6;
+              --accent-soft: rgba(13, 148, 166, 0.11);
+              --success: #228b62;
+              --warning: #cc8a1d;
+              --shadow: 0 20px 48px rgba(35, 54, 79, 0.10);
             }
 
             * {
@@ -65,8 +65,8 @@ internal fun buildKioskPlaceholderHtml(uiState: MainUiState): String {
             html {
               min-height: 100%;
               background:
-                radial-gradient(circle at top left, rgba(30, 167, 161, 0.18), transparent 30%),
-                radial-gradient(circle at top right, rgba(52, 120, 194, 0.18), transparent 28%),
+                radial-gradient(circle at top left, rgba(13, 148, 166, 0.12), transparent 30%),
+                radial-gradient(circle at top right, rgba(71, 127, 195, 0.12), transparent 28%),
                 linear-gradient(180deg, var(--bg-2) 0%, var(--bg-1) 100%);
             }
 
@@ -75,7 +75,7 @@ internal fun buildKioskPlaceholderHtml(uiState: MainUiState): String {
               min-height: 100vh;
               font-family: "Segoe UI", "Trebuchet MS", sans-serif;
               color: var(--text);
-              background: transparent;
+              background: linear-gradient(180deg, var(--bg-2) 0%, var(--bg-1) 100%);
             }
 
             .page {
@@ -90,7 +90,7 @@ internal fun buildKioskPlaceholderHtml(uiState: MainUiState): String {
               padding: 24px;
               border-radius: 28px;
               background:
-                linear-gradient(140deg, rgba(30, 167, 161, 0.18), rgba(10, 18, 26, 0.95) 48%),
+                linear-gradient(140deg, rgba(13, 148, 166, 0.10), rgba(255, 255, 255, 0.96) 48%),
                 var(--panel-strong);
               border: 1px solid var(--border);
               box-shadow: var(--shadow);
@@ -103,7 +103,7 @@ internal fun buildKioskPlaceholderHtml(uiState: MainUiState): String {
               width: 220px;
               height: 220px;
               border-radius: 50%;
-              background: radial-gradient(circle, rgba(30, 167, 161, 0.25), transparent 70%);
+              background: radial-gradient(circle, rgba(13, 148, 166, 0.15), transparent 70%);
               pointer-events: none;
             }
 
@@ -114,7 +114,7 @@ internal fun buildKioskPlaceholderHtml(uiState: MainUiState): String {
               padding: 8px 12px;
               border-radius: 999px;
               background: var(--accent-soft);
-              color: #c5f5f0;
+              color: var(--accent);
               font-size: 0.78rem;
               font-weight: 700;
               letter-spacing: 0.08em;
@@ -168,22 +168,22 @@ internal fun buildKioskPlaceholderHtml(uiState: MainUiState): String {
               border: 1px solid transparent;
               font-size: 0.92rem;
               color: var(--text);
-              background: rgba(255, 255, 255, 0.04);
+              background: rgba(12, 32, 56, 0.03);
             }
 
             .pill.ok {
-              border-color: rgba(51, 176, 120, 0.32);
-              background: rgba(51, 176, 120, 0.12);
+              border-color: rgba(34, 139, 98, 0.22);
+              background: rgba(34, 139, 98, 0.10);
             }
 
             .pill.warn {
-              border-color: rgba(240, 178, 78, 0.35);
-              background: rgba(240, 178, 78, 0.12);
+              border-color: rgba(204, 138, 29, 0.24);
+              background: rgba(204, 138, 29, 0.11);
             }
 
             .pill.info {
-              border-color: rgba(30, 167, 161, 0.28);
-              background: rgba(30, 167, 161, 0.11);
+              border-color: rgba(13, 148, 166, 0.20);
+              background: rgba(13, 148, 166, 0.08);
             }
 
             .section {
@@ -215,7 +215,7 @@ internal fun buildKioskPlaceholderHtml(uiState: MainUiState): String {
               width: 38px;
               height: 38px;
               border-radius: 14px;
-              background: rgba(30, 167, 161, 0.12);
+              background: rgba(13, 148, 166, 0.10);
               color: var(--accent);
             }
 
@@ -261,7 +261,7 @@ internal fun buildKioskPlaceholderHtml(uiState: MainUiState): String {
               margin-top: 14px;
               padding: 10px 12px;
               border-radius: 16px;
-              background: rgba(255, 255, 255, 0.03);
+              background: rgba(12, 32, 56, 0.04);
               color: var(--text);
               font-size: 0.92rem;
             }
@@ -289,15 +289,15 @@ internal fun buildKioskPlaceholderHtml(uiState: MainUiState): String {
               margin-top: 8px;
               border-radius: 50%;
               background: var(--accent);
-              box-shadow: 0 0 0 6px rgba(30, 167, 161, 0.12);
+              box-shadow: 0 0 0 6px rgba(13, 148, 166, 0.10);
             }
 
             .notice {
               margin-top: 18px;
               padding: 18px 20px;
               border-radius: 22px;
-              border: 1px dashed rgba(30, 167, 161, 0.35);
-              background: rgba(30, 167, 161, 0.08);
+              border: 1px dashed rgba(13, 148, 166, 0.24);
+              background: rgba(13, 148, 166, 0.06);
             }
 
             .notice strong {
@@ -308,7 +308,7 @@ internal fun buildKioskPlaceholderHtml(uiState: MainUiState): String {
 
             .footer {
               margin-top: 20px;
-              color: rgba(156, 176, 191, 0.78);
+              color: rgba(96, 114, 132, 0.88);
               text-align: center;
               font-size: 0.86rem;
               line-height: 1.6;

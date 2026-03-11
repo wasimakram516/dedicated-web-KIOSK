@@ -30,12 +30,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AdminPanelSettings
 import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Password
 import androidx.compose.material.icons.rounded.PowerSettingsNew
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material.icons.rounded.WarningAmber
 import androidx.compose.material3.Button
@@ -71,7 +73,9 @@ data class MainUiState(
     val pageError: String? = null,
     val isDeviceOwner: Boolean = false,
     val isLockTaskPermitted: Boolean = false,
-    val isHomeAppPinned: Boolean = false
+    val isHomeAppPinned: Boolean = false,
+    val isIgnoringBatteryOptimizations: Boolean = false,
+    val bootDiagnostics: BootDiagnostics = BootDiagnostics()
 )
 
 data class FormSubmissionResult(
@@ -108,6 +112,10 @@ fun KioskScreen(
     onAdminDismissed: () -> Unit,
     onExitRequested: () -> Unit,
     onReloadRequested: () -> Unit,
+    onRequestIgnoreBatteryOptimizations: () -> Unit,
+    onOpenBatteryOptimizationSettings: () -> Unit,
+    onOpenHomeSettings: () -> Unit,
+    onOpenAppInfo: () -> Unit,
     onPageStarted: () -> Unit,
     onPageFinished: () -> Unit,
     onPageError: (String) -> Unit
@@ -170,7 +178,11 @@ fun KioskScreen(
                 onSubmit = onAdminSaveSubmitted,
                 onDismiss = onAdminDismissed,
                 onExitRequested = onExitRequested,
-                onReloadRequested = onReloadRequested
+                onReloadRequested = onReloadRequested,
+                onRequestIgnoreBatteryOptimizations = onRequestIgnoreBatteryOptimizations,
+                onOpenBatteryOptimizationSettings = onOpenBatteryOptimizationSettings,
+                onOpenHomeSettings = onOpenHomeSettings,
+                onOpenAppInfo = onOpenAppInfo
             )
         }
     }
@@ -188,7 +200,7 @@ private fun PlaceholderWebPage(
         factory = { context ->
             WebView(context).apply {
                 onWebViewCreated(this)
-                setBackgroundColor(android.graphics.Color.BLACK)
+                setBackgroundColor(android.graphics.Color.parseColor("#F4F8FC"))
                 WebView.setWebContentsDebuggingEnabled(
                     context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
                 )
@@ -321,7 +333,7 @@ private fun InitialSetupOverlay(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xD9091016)),
+            .background(Color(0xB8E8EEF5)),
         contentAlignment = Alignment.Center
     ) {
         KioskPanelCard(
@@ -461,7 +473,11 @@ private fun AdminPinDialog(
             OutlinedButton(
                 modifier = Modifier.weight(1f),
                 onClick = onDismiss,
-                border = androidx.compose.foundation.BorderStroke(1.dp, PanelBorder)
+                border = androidx.compose.foundation.BorderStroke(1.dp, AccentColor.copy(alpha = 0.34f)),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    containerColor = PanelSurfaceRaised,
+                    contentColor = AccentColor
+                )
             ) {
                 Text("Cancel")
             }
@@ -491,7 +507,11 @@ private fun AdminPanelDialog(
     onSubmit: (String, String, String) -> FormSubmissionResult,
     onDismiss: () -> Unit,
     onExitRequested: () -> Unit,
-    onReloadRequested: () -> Unit
+    onReloadRequested: () -> Unit,
+    onRequestIgnoreBatteryOptimizations: () -> Unit,
+    onOpenBatteryOptimizationSettings: () -> Unit,
+    onOpenHomeSettings: () -> Unit,
+    onOpenAppInfo: () -> Unit
 ) {
     var domain by remember { mutableStateOf(uiState.configuredUrl) }
     var newPin by remember { mutableStateOf("") }
@@ -512,7 +532,7 @@ private fun AdminPanelDialog(
             PanelHeader(
                 icon = Icons.Rounded.AdminPanelSettings,
                 title = "Kiosk settings",
-                subtitle = "Manage the website entry point, admin PIN, and kiosk actions."
+                subtitle = "Update kiosk configuration first, then manage launcher and startup behavior."
             )
             DeviceStatusBanner(uiState = uiState)
             SectionCard(
@@ -565,64 +585,212 @@ private fun AdminPanelDialog(
             ShortcutBanner()
             if (message != null) {
                 StatusBanner(
-                    icon = Icons.Rounded.WarningAmber,
+                    icon = if (message == "Kiosk configuration saved.") {
+                        Icons.Rounded.CheckCircle
+                    } else {
+                        Icons.Rounded.WarningAmber
+                    },
                     text = message.orEmpty(),
-                    accent = DangerColor,
-                    tint = DangerSoft
+                    accent = if (message == "Kiosk configuration saved.") SuccessColor else DangerColor,
+                    tint = if (message == "Kiosk configuration saved.") SuccessSoft else DangerSoft
                 )
             }
-            Row(
+            Button(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                onClick = {
+                    val result = onSubmit(domain, newPin, confirmPin)
+                    if (!result.wasSuccessful) {
+                        message = result.message
+                    } else {
+                        message = "Kiosk configuration saved."
+                    }
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = AccentColor)
             ) {
-                OutlinedButton(
-                    modifier = Modifier.weight(1f),
-                    onClick = onReloadRequested,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, PanelBorder)
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Refresh,
-                        contentDescription = null
-                    )
-                    Spacer(modifier = Modifier.size(8.dp))
-                    Text("Reload")
-                }
-                Button(
-                    modifier = Modifier.weight(1f),
-                    onClick = {
-                        val result = onSubmit(domain, newPin, confirmPin)
-                        if (!result.wasSuccessful) {
-                            message = result.message
-                        }
+                Icon(
+                    imageVector = Icons.Rounded.CheckCircle,
+                    contentDescription = null
+                )
+                Spacer(modifier = Modifier.size(8.dp))
+                Text("Save configuration")
+            }
+            SectionCard(
+                icon = Icons.Rounded.Home,
+                title = "Default Home app",
+                subtitle = "Open Android's launcher chooser to switch between Sinan KIOSK and the phone's normal home screen."
+            ) {
+                StatusBanner(
+                    icon = if (uiState.isHomeAppPinned) {
+                        Icons.Rounded.CheckCircle
+                    } else {
+                        Icons.Rounded.WarningAmber
                     },
+                    text = if (uiState.isHomeAppPinned) {
+                        "Sinan KIOSK is currently selected as the default Home app."
+                    } else {
+                        "Another launcher is currently selected. Choose Sinan KIOSK here if you want reboot to return into the kiosk."
+                    },
+                    accent = if (uiState.isHomeAppPinned) SuccessColor else WarningColor,
+                    tint = if (uiState.isHomeAppPinned) SuccessSoft else WarningSoft
+                )
+                Button(
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = onOpenHomeSettings,
                     colors = ButtonDefaults.buttonColors(containerColor = AccentColor)
                 ) {
                     Icon(
-                        imageVector = Icons.Rounded.CheckCircle,
+                        imageVector = Icons.Rounded.Home,
                         contentDescription = null
                     )
                     Spacer(modifier = Modifier.size(8.dp))
-                    Text("Save")
+                    Text("Choose default Home app")
                 }
             }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            SectionCard(
+                icon = if (uiState.isIgnoringBatteryOptimizations) {
+                    Icons.Rounded.CheckCircle
+                } else {
+                    Icons.Rounded.WarningAmber
+                },
+                title = "Background startup",
+                subtitle = "Battery optimization and vendor battery controls can affect whether the kiosk relaunches after reboot."
             ) {
-                TextButton(
-                    onClick = onExitRequested,
-                    colors = ButtonDefaults.textButtonColors(contentColor = DangerColor)
+                StatusBanner(
+                    icon = if (uiState.isIgnoringBatteryOptimizations) {
+                        Icons.Rounded.CheckCircle
+                    } else {
+                        Icons.Rounded.Info
+                    },
+                    text = if (uiState.isIgnoringBatteryOptimizations) {
+                        "Battery optimization is already disabled for this kiosk app."
+                    } else {
+                        "Battery optimization is still enabled. Android may delay or suppress boot relaunch until the app is opened again."
+                    },
+                    accent = if (uiState.isIgnoringBatteryOptimizations) SuccessColor else WarningColor,
+                    tint = if (uiState.isIgnoringBatteryOptimizations) SuccessSoft else WarningSoft
+                )
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Rounded.PowerSettingsNew,
-                        contentDescription = null
-                    )
-                    Spacer(modifier = Modifier.size(8.dp))
-                    Text("Exit app")
+                    if (!uiState.isIgnoringBatteryOptimizations) {
+                        Button(
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = onRequestIgnoreBatteryOptimizations,
+                            colors = ButtonDefaults.buttonColors(containerColor = AccentColor)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.PowerSettingsNew,
+                                contentDescription = null
+                            )
+                            Spacer(modifier = Modifier.size(8.dp))
+                            Text("Disable optimization")
+                        }
+                    }
+                    OutlinedButton(
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = onOpenBatteryOptimizationSettings,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, AccentColor.copy(alpha = 0.34f)),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            containerColor = PanelSurfaceRaised,
+                            contentColor = AccentColor
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Info,
+                            contentDescription = null
+                        )
+                        Spacer(modifier = Modifier.size(8.dp))
+                        Text(if (uiState.isIgnoringBatteryOptimizations) "Open settings" else "More options")
+                    }
                 }
-                TextButton(onClick = onDismiss) {
-                    Text("Close")
+            }
+            SectionCard(
+                icon = Icons.Rounded.PowerSettingsNew,
+                title = "Admin actions",
+                subtitle = "Refresh the kiosk or leave it temporarily when maintenance is needed."
+            ) {
+                if (uiState.isHomeAppPinned) {
+                    StatusBanner(
+                        icon = Icons.Rounded.WarningAmber,
+                        text = "Sinan KIOSK is still the default Home app. To return to the phone launcher, switch the Home app first and then exit.",
+                        accent = WarningColor,
+                        tint = WarningSoft
+                    )
+                }
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    OutlinedButton(
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = onReloadRequested,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, AccentColor.copy(alpha = 0.34f)),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            containerColor = PanelSurfaceRaised,
+                            contentColor = AccentColor
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Refresh,
+                            contentDescription = null
+                        )
+                        Spacer(modifier = Modifier.size(8.dp))
+                        Text("Reload website")
+                    }
+                    if (uiState.isHomeAppPinned) {
+                        OutlinedButton(
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = onOpenHomeSettings,
+                            border = androidx.compose.foundation.BorderStroke(1.dp, AccentColor.copy(alpha = 0.34f)),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                containerColor = PanelSurfaceRaised,
+                                contentColor = AccentColor
+                            )
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Home,
+                                contentDescription = null
+                            )
+                            Spacer(modifier = Modifier.size(8.dp))
+                            Text("Switch Home app first")
+                        }
+                    }
+                    OutlinedButton(
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = onOpenAppInfo,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, AccentColor.copy(alpha = 0.34f)),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            containerColor = PanelSurfaceRaised,
+                            contentColor = AccentColor
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Info,
+                            contentDescription = null
+                        )
+                        Spacer(modifier = Modifier.size(8.dp))
+                        Text("Open app info")
+                    }
+                    Button(
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = onExitRequested,
+                        colors = ButtonDefaults.buttonColors(containerColor = DangerColor)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.PowerSettingsNew,
+                            contentDescription = null
+                        )
+                        Spacer(modifier = Modifier.size(8.dp))
+                        Text("Exit app")
+                    }
+                    TextButton(
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = onDismiss,
+                        colors = ButtonDefaults.textButtonColors(contentColor = AccentColor)
+                    ) {
+                        Text("Close settings")
+                    }
                 }
             }
         }
@@ -793,3 +961,6 @@ private fun KioskWebView(
         }
     )
 }
+
+private fun formatDiagnosticsTimestamp(timestamp: Long): String =
+    java.text.SimpleDateFormat("MMM d, yyyy h:mm a", Locale.US).format(java.util.Date(timestamp))

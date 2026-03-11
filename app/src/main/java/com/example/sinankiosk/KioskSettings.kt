@@ -15,6 +15,14 @@ data class KioskConfiguration(
         get() = domain.isNotBlank() && isPinConfigured
 }
 
+data class BootDiagnostics(
+    val lastBroadcastAction: String? = null,
+    val lastBroadcastAtMillis: Long? = null,
+    val lastLaunchAttemptAtMillis: Long? = null,
+    val lastLaunchAttemptSucceeded: Boolean? = null,
+    val lastLaunchFailureReason: String? = null
+)
+
 class KioskSettings(context: Context) {
     private val appContext = context.applicationContext
     private val storageContext = appContext.createDeviceProtectedStorageContext()
@@ -84,6 +92,39 @@ class KioskSettings(context: Context) {
         return hashPin(pin, salt) == storedHash
     }
 
+    fun loadBootDiagnostics(): BootDiagnostics = BootDiagnostics(
+        lastBroadcastAction = preferences.getString(KEY_LAST_BOOT_ACTION, null),
+        lastBroadcastAtMillis = preferences.takeIf { it.contains(KEY_LAST_BOOT_AT) }
+            ?.getLong(KEY_LAST_BOOT_AT, 0L)
+            ?.takeIf { it > 0L },
+        lastLaunchAttemptAtMillis = preferences.takeIf { it.contains(KEY_LAST_BOOT_LAUNCH_AT) }
+            ?.getLong(KEY_LAST_BOOT_LAUNCH_AT, 0L)
+            ?.takeIf { it > 0L },
+        lastLaunchAttemptSucceeded = when {
+            !preferences.contains(KEY_LAST_BOOT_LAUNCH_SUCCESS) -> null
+            else -> preferences.getBoolean(KEY_LAST_BOOT_LAUNCH_SUCCESS, false)
+        },
+        lastLaunchFailureReason = preferences.getString(KEY_LAST_BOOT_LAUNCH_FAILURE, null)
+    )
+
+    fun recordBootBroadcast(action: String?) {
+        preferences.edit()
+            .putString(KEY_LAST_BOOT_ACTION, action)
+            .putLong(KEY_LAST_BOOT_AT, System.currentTimeMillis())
+            .apply()
+    }
+
+    fun recordBootLaunchAttempt(
+        succeeded: Boolean,
+        failureReason: String? = null
+    ) {
+        preferences.edit()
+            .putLong(KEY_LAST_BOOT_LAUNCH_AT, System.currentTimeMillis())
+            .putBoolean(KEY_LAST_BOOT_LAUNCH_SUCCESS, succeeded)
+            .putString(KEY_LAST_BOOT_LAUNCH_FAILURE, failureReason)
+            .apply()
+    }
+
     private fun migrateLegacyPreferencesIfRequired() {
         val deviceProtectedPreferences = storageContext.getSharedPreferences(
             PREFERENCES_NAME,
@@ -110,6 +151,11 @@ class KioskSettings(context: Context) {
         private const val KEY_DOMAIN = "domain"
         private const val KEY_PIN_HASH = "pin_hash"
         private const val KEY_PIN_SALT = "pin_salt"
+        private const val KEY_LAST_BOOT_ACTION = "last_boot_action"
+        private const val KEY_LAST_BOOT_AT = "last_boot_at"
+        private const val KEY_LAST_BOOT_LAUNCH_AT = "last_boot_launch_at"
+        private const val KEY_LAST_BOOT_LAUNCH_SUCCESS = "last_boot_launch_success"
+        private const val KEY_LAST_BOOT_LAUNCH_FAILURE = "last_boot_launch_failure"
         private const val MINIMUM_PIN_LENGTH = 4
         internal const val DEFAULT_PIN = "1234"
 

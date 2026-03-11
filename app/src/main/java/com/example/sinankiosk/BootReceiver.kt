@@ -12,6 +12,8 @@ class BootReceiver : BroadcastReceiver() {
             return
         }
 
+        val kioskSettings = KioskSettings(context)
+        kioskSettings.recordBootBroadcast(intent.action)
         KioskDevicePolicyController(context).applyDedicatedDevicePolicies()
 
         val launchIntent = Intent.makeRestartActivityTask(
@@ -22,7 +24,13 @@ class BootReceiver : BroadcastReceiver() {
 
         runCatching {
             context.startActivity(launchIntent)
+            kioskSettings.recordBootLaunchAttempt(succeeded = true)
         }.onFailure { throwable ->
+            kioskSettings.recordBootLaunchAttempt(
+                succeeded = false,
+                failureReason = throwable::class.java.simpleName.takeIf { it.isNotBlank() }
+                    ?: throwable.message
+            )
             Log.w(
                 TAG,
                 "Failed to relaunch kiosk after system event ${intent.action}",

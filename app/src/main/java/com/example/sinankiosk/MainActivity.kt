@@ -1,10 +1,14 @@
 package com.example.sinankiosk
 
+import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
+import android.provider.Settings
 import android.view.KeyEvent
 import android.view.WindowManager
 import android.webkit.WebView
@@ -80,6 +84,10 @@ class MainActivity : ComponentActivity() {
                     onAdminDismissed = ::dismissAdminUi,
                     onExitRequested = ::exitKioskApp,
                     onReloadRequested = ::reloadWebView,
+                    onRequestIgnoreBatteryOptimizations = ::requestIgnoreBatteryOptimizations,
+                    onOpenBatteryOptimizationSettings = ::openBatteryOptimizationSettings,
+                    onOpenHomeSettings = ::openHomeSettings,
+                    onOpenAppInfo = ::openAppInfo,
                     onPageStarted = {
                         uiState = uiState.copy(
                             isPageLoading = true,
@@ -169,10 +177,16 @@ class MainActivity : ComponentActivity() {
 
     private fun syncDevicePolicyState() {
         devicePolicyController.applyDedicatedDevicePolicies()
+        val powerManager = getSystemService(PowerManager::class.java)
+        val isIgnoringBatteryOptimizations =
+            Build.VERSION.SDK_INT < Build.VERSION_CODES.M ||
+                powerManager?.isIgnoringBatteryOptimizations(packageName) == true
         uiState = uiState.copy(
             isDeviceOwner = devicePolicyController.isDeviceOwner(),
             isLockTaskPermitted = devicePolicyController.isLockTaskPermitted(),
-            isHomeAppPinned = devicePolicyController.isHomeAppPinned()
+            isHomeAppPinned = devicePolicyController.isHomeAppPinned(),
+            isIgnoringBatteryOptimizations = isIgnoringBatteryOptimizations,
+            bootDiagnostics = kioskSettings.loadBootDiagnostics()
         )
     }
 
@@ -278,6 +292,45 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun requestIgnoreBatteryOptimizations() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || uiState.isIgnoringBatteryOptimizations) {
+            openBatteryOptimizationSettings()
+            return
+        }
+
+        launchSystemSettings(
+            primaryIntent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                data = Uri.parse("package:$packageName")
+            },
+            fallbackIntent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+        )
+    }
+
+    private fun openBatteryOptimizationSettings() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+            return
+        }
+
+        launchSystemSettings(
+            primaryIntent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+        )
+    }
+
+    private fun openHomeSettings() {
+        launchSystemSettings(
+            primaryIntent = Intent(Settings.ACTION_HOME_SETTINGS),
+            fallbackIntent = Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)
+        )
+    }
+
+    private fun openAppInfo() {
+        launchSystemSettings(
+            primaryIntent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = Uri.parse("package:$packageName")
+            }
+        )
+    }
+
     private fun exitKioskApp() {
         isAdminExitInProgress = true
         stopKioskEnforcement()
@@ -312,6 +365,28 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun intentForSelf() = Intent(this, MainActivity::class.java)
+
+    private fun launchSystemSettings(
+        primaryIntent: Intent,
+        fallbackIntent: Intent? = null
+    ) {
+        val primaryLaunch = runCatching {
+            startActivity(primaryIntent)
+        }
+
+        if (primaryLaunch.isSuccess || fallbackIntent == null) {
+            return
+        }
+
+        val exception = primaryLaunch.exceptionOrNull()
+        if (exception !is ActivityNotFoundException) {
+            return
+        }
+
+        runCatching {
+            startActivity(fallbackIntent)
+        }
+    }
 
     private fun startKioskEnforcement() {
         ensurePinnedKioskMode()

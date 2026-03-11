@@ -39,21 +39,21 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 
-internal val ScreenBackground = Color(0xFF091016)
-internal val ScreenGradientTop = Color(0xFF14202B)
-internal val PanelSurface = Color(0xFF111922)
-internal val PanelSurfaceRaised = Color(0xFF17222C)
-internal val PanelBorder = Color(0xFF243340)
-internal val PanelText = Color(0xFFF2F6FA)
-internal val PanelTextMuted = Color(0xFF97A6B3)
-internal val AccentColor = Color(0xFF1EA7A1)
-internal val AccentSoft = Color(0x3324C6BE)
-internal val SuccessColor = Color(0xFF33B078)
-internal val SuccessSoft = Color(0x2233B078)
-internal val WarningColor = Color(0xFFF0B24E)
-internal val WarningSoft = Color(0x22F0B24E)
-internal val DangerColor = Color(0xFFE06778)
-internal val DangerSoft = Color(0x22E06778)
+internal val ScreenBackground = Color(0xFFF1F5FA)
+internal val ScreenGradientTop = Color(0xFFE5EDF6)
+internal val PanelSurface = Color(0xFFF7FAFD)
+internal val PanelSurfaceRaised = Color(0xFFFFFFFF)
+internal val PanelBorder = Color(0xFFD9E3ED)
+internal val PanelText = Color(0xFF13212E)
+internal val PanelTextMuted = Color(0xFF607284)
+internal val AccentColor = Color(0xFF0D94A6)
+internal val AccentSoft = Color(0x1A0D94A6)
+internal val SuccessColor = Color(0xFF228B62)
+internal val SuccessSoft = Color(0x16228B62)
+internal val WarningColor = Color(0xFFCC8A1D)
+internal val WarningSoft = Color(0x16CC8A1D)
+internal val DangerColor = Color(0xFFC4475D)
+internal val DangerSoft = Color(0x16C4475D)
 
 @Composable
 internal fun KioskDialog(
@@ -89,7 +89,7 @@ internal fun KioskPanelCard(
         Box(
             modifier = Modifier.background(
                 Brush.linearGradient(
-                    colors = listOf(Color(0xFF17222C), PanelSurface)
+                    colors = listOf(Color(0xFFFFFFFF), PanelSurface)
                 )
             )
         ) {
