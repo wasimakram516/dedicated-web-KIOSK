@@ -1,5 +1,6 @@
 package com.example.sinankiosk
 
+import android.app.role.RoleManager
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
@@ -70,6 +71,7 @@ class MainActivity : ComponentActivity() {
 
         loadSavedConfiguration()
         syncDevicePolicyState()
+        requestHomeRoleIfNeeded()
 
         setContent {
             SinanKIOSKTheme {
@@ -402,6 +404,37 @@ class MainActivity : ComponentActivity() {
         devicePolicyController.startLockTaskIfPermitted(this)
     }
 
+    // On non-device-owner phones we cannot hide competing launchers, so the OS
+    // may show a launcher chooser after reboot. RoleManager (API 29+) lets us
+    // request the home role with a single-tap confirmation dialog instead of
+    // the multi-option chooser. Once the user confirms, Android remembers the
+    // choice reliably across reboots — no repeated prompts.
+    private fun requestHomeRoleIfNeeded() {
+        if (uiState.isDeviceOwner || uiState.isHomeAppPinned) return
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
+
+        val roleManager = getSystemService(RoleManager::class.java) ?: return
+        if (!roleManager.isRoleAvailable(RoleManager.ROLE_HOME)) return
+        if (roleManager.isRoleHeld(RoleManager.ROLE_HOME)) return
+
+        runCatching {
+            @Suppress("DEPRECATION")
+            startActivityForResult(
+                roleManager.createRequestRoleIntent(RoleManager.ROLE_HOME),
+                REQUEST_HOME_ROLE
+            )
+        }
+    }
+
+    @Deprecated("Required for RoleManager result on API < 34")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        @Suppress("DEPRECATION")
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_HOME_ROLE) {
+            syncDevicePolicyState()
+        }
+    }
+
     private fun applyImmersiveMode() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         WindowInsetsControllerCompat(window, window.decorView).apply {
@@ -413,5 +446,6 @@ class MainActivity : ComponentActivity() {
 
     private companion object {
         private const val LOCK_TASK_ENFORCEMENT_INTERVAL_MS = 1_000L
+        private const val REQUEST_HOME_ROLE = 1001
     }
 }

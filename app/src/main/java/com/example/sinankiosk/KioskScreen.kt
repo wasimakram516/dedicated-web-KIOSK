@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.pm.ApplicationInfo
 import android.graphics.Bitmap
 import android.os.Message
+import android.view.View
 import android.webkit.CookieManager
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
@@ -495,7 +496,7 @@ private fun AdminPinDialog(
                     contentDescription = null
                 )
                 Spacer(modifier = Modifier.size(8.dp))
-                Text("Open settings")
+                Text("Confirm")
             }
         }
     }
@@ -824,6 +825,11 @@ private fun KioskWebView(
                     setAcceptThirdPartyCookies(webView, true)
                 }
 
+                // Force LTR layout so Android system locale/RTL settings don't affect
+                // the WebView's input method cursor direction, which would cause typed
+                // characters to appear in reverse order.
+                layoutDirection = View.LAYOUT_DIRECTION_LTR
+
                 settings.apply {
                     javaScriptEnabled = true
                     domStorageEnabled = true
@@ -838,6 +844,9 @@ private fun KioskWebView(
                     useWideViewPort = true
                     loadWithOverviewMode = true
                     defaultTextEncodingName = "UTF-8"
+                    // Explicit 100% prevents IME cursor-position miscalculation when
+                    // the system font size or display scaling differs from 1×.
+                    textZoom = 100
                 }
 
                 tag = WebViewLoadState(
@@ -896,6 +905,42 @@ private fun KioskWebView(
 
                     override fun onPageFinished(view: WebView?, url: String?) {
                         onPageFinished()
+                        // The website supports Arabic and sets dir="rtl" on the
+                        // document/body. The IME (keyboard) reads the dir *attribute*,
+                        // not CSS, so `direction:ltr !important` in a stylesheet has no
+                        // effect on where characters are inserted. We must force the
+                        // dir="ltr" attribute on every input element, and crucially on
+                        // the focus event (capture phase) so it fires right before the
+                        // IME activates — which is when direction is locked in.
+                        view?.evaluateJavascript(
+                            """(function(){
+                                function fix(el){
+                                    if(el.getAttribute('dir')!=='ltr')el.setAttribute('dir','ltr');
+                                }
+                                // Fix on every focus — fires right before the IME opens.
+                                document.addEventListener('focus',function(e){
+                                    var t=e.target;
+                                    if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'))fix(t);
+                                },true);
+                                // Fix inputs already in the DOM.
+                                document.querySelectorAll('input,textarea').forEach(fix);
+                                // Watch for new inputs and for the framework re-applying dir="rtl".
+                                new MutationObserver(function(ms){
+                                    ms.forEach(function(m){
+                                        if(m.type==='attributes'&&m.attributeName==='dir'){
+                                            var t=m.target;
+                                            if(t.tagName==='INPUT'||t.tagName==='TEXTAREA')fix(t);
+                                        }
+                                        m.addedNodes.forEach(function(n){
+                                            if(!n.querySelectorAll)return;
+                                            if(n.tagName==='INPUT'||n.tagName==='TEXTAREA')fix(n);
+                                            n.querySelectorAll('input,textarea').forEach(fix);
+                                        });
+                                    });
+                                }).observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['dir']});
+                            })();""",
+                            null
+                        )
                     }
 
                     override fun shouldOverrideUrlLoading(

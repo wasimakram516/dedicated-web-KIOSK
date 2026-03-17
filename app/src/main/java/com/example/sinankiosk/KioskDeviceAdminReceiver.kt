@@ -8,6 +8,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.UserManager
 
@@ -85,6 +86,12 @@ class KioskDevicePolicyController(context: Context) {
                 homeActivityComponent
             )
         }
+
+        // On OEM phones (Samsung, Xiaomi, etc.) the persistent preferred activity
+        // can be overridden or ignored after a reboot, causing the launcher chooser
+        // to appear. Hiding every competing home app leaves Android with no choice
+        // but to use Sinan KIOSK as the home — the chooser never appears.
+        hideCompetingLaunchers()
     }
 
     fun clearDedicatedDeviceRestrictions() {
@@ -114,6 +121,10 @@ class KioskDevicePolicyController(context: Context) {
                 appContext.packageName
             )
         }
+
+        // Restore competing launchers so the phone can return to normal after
+        // the admin exits the kiosk.
+        unhideCompetingLaunchers()
     }
 
     fun startLockTaskIfPermitted(activity: Activity) {
@@ -139,6 +150,37 @@ class KioskDevicePolicyController(context: Context) {
     fun isLockTaskActive(activity: Activity): Boolean {
         val activityManager = activity.getSystemService(ActivityManager::class.java)
         return activityManager.lockTaskModeState != ActivityManager.LOCK_TASK_MODE_NONE
+    }
+
+    private fun hideCompetingLaunchers() {
+        appContext.packageManager
+            .queryIntentActivities(homeIntent(), 0)
+            .mapNotNull { it.activityInfo?.packageName }
+            .filter { it != appContext.packageName }
+            .forEach { pkg ->
+                runCatching {
+                    devicePolicyManager.setApplicationHidden(adminComponent, pkg, true)
+                }
+            }
+    }
+
+    private fun unhideCompetingLaunchers() {
+        // MATCH_UNINSTALLED_PACKAGES is required to find apps that were hidden
+        // via setApplicationHidden — they no longer appear in normal queries.
+        appContext.packageManager
+            .queryIntentActivities(homeIntent(), PackageManager.MATCH_UNINSTALLED_PACKAGES)
+            .mapNotNull { it.activityInfo?.packageName }
+            .filter { it != appContext.packageName }
+            .forEach { pkg ->
+                runCatching {
+                    devicePolicyManager.setApplicationHidden(adminComponent, pkg, false)
+                }
+            }
+    }
+
+    private fun homeIntent(): Intent = Intent(Intent.ACTION_MAIN).apply {
+        addCategory(Intent.CATEGORY_HOME)
+        addCategory(Intent.CATEGORY_DEFAULT)
     }
 
     private fun homeIntentFilter(): IntentFilter = IntentFilter(Intent.ACTION_MAIN).apply {
