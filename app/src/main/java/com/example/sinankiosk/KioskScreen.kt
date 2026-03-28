@@ -5,13 +5,18 @@ import android.content.pm.ApplicationInfo
 import android.graphics.Bitmap
 import android.os.Message
 import android.view.View
+import android.view.ViewGroup
+import android.webkit.ConsoleMessage
 import android.webkit.CookieManager
+import android.webkit.SslErrorHandler
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.net.http.SslError
+import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -815,6 +820,12 @@ private fun KioskWebView(
                 val webView = this
                 onWebViewCreated(this)
                 setBackgroundColor(android.graphics.Color.WHITE)
+                
+                // Force full size layout params
+                layoutParams = ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
 
                 WebView.setWebContentsDebuggingEnabled(
                     context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
@@ -826,8 +837,7 @@ private fun KioskWebView(
                 }
 
                 // Force LTR layout so Android system locale/RTL settings don't affect
-                // the WebView's input method cursor direction, which would cause typed
-                // characters to appear in reverse order.
+                // the WebView's input method cursor direction.
                 layoutDirection = View.LAYOUT_DIRECTION_LTR
 
                 settings.apply {
@@ -844,9 +854,10 @@ private fun KioskWebView(
                     useWideViewPort = true
                     loadWithOverviewMode = true
                     defaultTextEncodingName = "UTF-8"
-                    // Explicit 100% prevents IME cursor-position miscalculation when
-                    // the system font size or display scaling differs from 1×.
                     textZoom = 100
+                    
+                    // Set a modern standard User Agent to avoid "mobile-lite" site versions
+                    userAgentString = "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36"
                 }
 
                 tag = WebViewLoadState(
@@ -855,6 +866,14 @@ private fun KioskWebView(
                 )
 
                 webChromeClient = object : WebChromeClient() {
+                    override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
+                        val msg = consoleMessage?.message() ?: "null"
+                        val line = consoleMessage?.lineNumber() ?: 0
+                        val src = consoleMessage?.sourceId() ?: "unknown"
+                        Log.d("KioskWebViewJS", "[$src:$line] $msg")
+                        return true
+                    }
+
                     override fun onCreateWindow(
                         view: WebView?,
                         isDialog: Boolean,
@@ -901,6 +920,15 @@ private fun KioskWebView(
                 webViewClient = object : WebViewClient() {
                     override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                         onPageStarted()
+                    }
+
+                    override fun onReceivedSslError(
+                        view: WebView?,
+                        handler: SslErrorHandler?,
+                        error: SslError?
+                    ) {
+                        Log.w("KioskWebView", "SSL error ${error?.primaryError} on ${error?.url}")
+                        handler?.proceed()
                     }
 
                     override fun onPageFinished(view: WebView?, url: String?) {
