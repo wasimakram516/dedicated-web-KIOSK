@@ -10,12 +10,17 @@ import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
 import android.provider.Settings
+import android.content.BroadcastReceiver
+import android.content.IntentFilter
 import android.view.KeyEvent
 import android.view.WindowManager
 import android.webkit.WebView
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import android.content.pm.PackageManager
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -42,10 +47,31 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private val cameraPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { /* result handled by WebChromeClient.onPermissionRequest */ }
+
     private var webView: WebView? = null
     private var reloadToken by mutableIntStateOf(0)
     private var uiState by mutableStateOf(MainUiState())
     private var isAdminExitInProgress = false
+
+    private val screenReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context?, intent: Intent?) {
+            when (intent?.action) {
+                Intent.ACTION_SCREEN_OFF -> {
+                    // Screen turned off — drop keep-screen-on so power button
+                    // works as a proper toggle rather than being ignored.
+                    window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                }
+                Intent.ACTION_SCREEN_ON -> {
+                    // Screen woke up — restore keep-screen-on so the display
+                    // never times out while the kiosk is in use.
+                    window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                }
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -69,9 +95,24 @@ class MainActivity : ComponentActivity() {
             }
         )
 
+        registerReceiver(
+            screenReceiver,
+            IntentFilter().apply {
+                addAction(Intent.ACTION_SCREEN_OFF)
+                addAction(Intent.ACTION_SCREEN_ON)
+            }
+        )
+
+        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.CAMERA)
+            != PackageManager.PERMISSION_GRANTED) {
+            cameraPermissionLauncher.launch(android.Manifest.permission.CAMERA)
+        }
+
+        setMaxVolume()
         loadSavedConfiguration()
         syncDevicePolicyState()
         requestHomeRoleIfNeeded()
+        loadSavedBrightness()
 
         setContent {
             SinanKIOSKTheme {
@@ -90,6 +131,8 @@ class MainActivity : ComponentActivity() {
                     onOpenBatteryOptimizationSettings = ::openBatteryOptimizationSettings,
                     onOpenHomeSettings = ::openHomeSettings,
                     onOpenAppInfo = ::openAppInfo,
+                    onBrightnessChanged = ::applyBrightness,
+                    onLockScreenRequested = ::lockScreen,
                     onPageStarted = {
                         uiState = uiState.copy(
                             isPageLoading = true,
@@ -111,8 +154,34 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
-            unlockSequenceDetector.onKeyPressed(event.keyCode)
+        when (event.keyCode) {
+            KeyEvent.KEYCODE_VOLUME_UP -> {
+                // Quick tap (repeatCount == 0) feeds the admin unlock sequence.
+                // Held down (repeatCount > 0) increases brightness instead.
+                if (event.action == KeyEvent.ACTION_DOWN) {
+                    if (event.repeatCount == 0) {
+                        unlockSequenceDetector.onKeyPressed(event.keyCode)
+                    } else {
+                        applyBrightness((uiState.brightness + 2).coerceAtMost(100))
+                    }
+                }
+                return true
+            }
+            KeyEvent.KEYCODE_VOLUME_DOWN -> {
+                if (event.action == KeyEvent.ACTION_DOWN) {
+                    if (event.repeatCount == 0) {
+                        unlockSequenceDetector.onKeyPressed(event.keyCode)
+                    } else {
+                        applyBrightness((uiState.brightness - 2).coerceAtLeast(5))
+                    }
+                }
+                return true
+            }
+            else -> {
+                if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+                    unlockSequenceDetector.onKeyPressed(event.keyCode)
+                }
+            }
         }
 
         return super.dispatchKeyEvent(event)
@@ -154,6 +223,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        runCatching { unregisterReceiver(screenReceiver) }
         foregroundHandler.removeCallbacksAndMessages(null)
         webView?.let { view ->
             view.stopLoading()
@@ -188,7 +258,8 @@ class MainActivity : ComponentActivity() {
             isLockTaskPermitted = devicePolicyController.isLockTaskPermitted(),
             isHomeAppPinned = devicePolicyController.isHomeAppPinned(),
             isIgnoringBatteryOptimizations = isIgnoringBatteryOptimizations,
-            bootDiagnostics = kioskSettings.loadBootDiagnostics()
+            bootDiagnostics = kioskSettings.loadBootDiagnostics(),
+            canWriteSettings = Settings.System.canWrite(this)
         )
     }
 
@@ -331,6 +402,65 @@ class MainActivity : ComponentActivity() {
                 data = Uri.parse("package:$packageName")
             }
         )
+    }
+
+    private fun loadSavedBrightness() {
+        val canWrite = Settings.System.canWrite(this)
+        val saved = kioskSettings.loadBrightness()
+        uiState = uiState.copy(brightness = saved, canWriteSettings = canWrite)
+        if (canWrite) {
+            setBrightnessInternal(saved)
+        }
+    }
+
+    private fun applyBrightness(percent: Int) {
+        if (!Settings.System.canWrite(this)) {
+            startActivity(
+                Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS).apply {
+                    data = android.net.Uri.parse("package:$packageName")
+                }
+            )
+            return
+        }
+        kioskSettings.saveBrightness(percent)
+        uiState = uiState.copy(brightness = percent, canWriteSettings = true)
+        setBrightnessInternal(percent)
+    }
+
+    private fun setBrightnessInternal(percent: Int) {
+        val value = (percent / 100f * 255).toInt().coerceIn(5, 255)
+        runCatching {
+            Settings.System.putInt(
+                contentResolver,
+                Settings.System.SCREEN_BRIGHTNESS_MODE,
+                Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL
+            )
+            Settings.System.putInt(
+                contentResolver,
+                Settings.System.SCREEN_BRIGHTNESS,
+                value
+            )
+            window.attributes = window.attributes.also { it.screenBrightness = value / 255f }
+        }
+    }
+
+    private fun setMaxVolume() {
+        val audioManager = getSystemService(android.media.AudioManager::class.java) ?: return
+        listOf(
+            android.media.AudioManager.STREAM_MUSIC,
+            android.media.AudioManager.STREAM_RING,
+            android.media.AudioManager.STREAM_NOTIFICATION
+        ).forEach { stream ->
+            audioManager.setStreamVolume(
+                stream,
+                audioManager.getStreamMaxVolume(stream),
+                0
+            )
+        }
+    }
+
+    private fun lockScreen() {
+        devicePolicyController.lockScreen()
     }
 
     private fun exitKioskApp() {

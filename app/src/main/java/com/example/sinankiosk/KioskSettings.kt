@@ -37,6 +37,12 @@ class KioskSettings(context: Context) {
         migrateLegacyPreferencesIfRequired()
     }
 
+    fun loadBrightness(): Int = preferences.getInt(KEY_BRIGHTNESS, DEFAULT_BRIGHTNESS)
+
+    fun saveBrightness(percent: Int) {
+        preferences.edit().putInt(KEY_BRIGHTNESS, percent.coerceIn(5, 100)).apply()
+    }
+
     fun loadConfiguration(): KioskConfiguration = KioskConfiguration(
         domain = preferences.getString(KEY_DOMAIN, "").orEmpty(),
         isPinConfigured = preferences.contains(KEY_PIN_HASH) && preferences.contains(KEY_PIN_SALT)
@@ -156,6 +162,8 @@ class KioskSettings(context: Context) {
         private const val KEY_LAST_BOOT_LAUNCH_AT = "last_boot_launch_at"
         private const val KEY_LAST_BOOT_LAUNCH_SUCCESS = "last_boot_launch_success"
         private const val KEY_LAST_BOOT_LAUNCH_FAILURE = "last_boot_launch_failure"
+        private const val KEY_BRIGHTNESS = "brightness"
+        private const val DEFAULT_BRIGHTNESS = 80
         private const val MINIMUM_PIN_LENGTH = 4
         internal const val DEFAULT_PIN = "1234"
 

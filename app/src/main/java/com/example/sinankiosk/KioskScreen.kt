@@ -9,6 +9,7 @@ import android.view.ViewGroup
 import android.webkit.ConsoleMessage
 import android.webkit.CookieManager
 import android.webkit.SslErrorHandler
+import android.webkit.PermissionRequest
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
@@ -35,6 +36,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AdminPanelSettings
+import androidx.compose.material.icons.rounded.Brightness6
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Info
@@ -49,6 +51,7 @@ import androidx.compose.material.icons.rounded.WarningAmber
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -81,7 +84,9 @@ data class MainUiState(
     val isLockTaskPermitted: Boolean = false,
     val isHomeAppPinned: Boolean = false,
     val isIgnoringBatteryOptimizations: Boolean = false,
-    val bootDiagnostics: BootDiagnostics = BootDiagnostics()
+    val bootDiagnostics: BootDiagnostics = BootDiagnostics(),
+    val brightness: Int = 80,
+    val canWriteSettings: Boolean = false
 )
 
 data class FormSubmissionResult(
@@ -122,6 +127,8 @@ fun KioskScreen(
     onOpenBatteryOptimizationSettings: () -> Unit,
     onOpenHomeSettings: () -> Unit,
     onOpenAppInfo: () -> Unit,
+    onBrightnessChanged: (Int) -> Unit,
+    onLockScreenRequested: () -> Unit,
     onPageStarted: () -> Unit,
     onPageFinished: () -> Unit,
     onPageError: (String) -> Unit
@@ -188,7 +195,9 @@ fun KioskScreen(
                 onRequestIgnoreBatteryOptimizations = onRequestIgnoreBatteryOptimizations,
                 onOpenBatteryOptimizationSettings = onOpenBatteryOptimizationSettings,
                 onOpenHomeSettings = onOpenHomeSettings,
-                onOpenAppInfo = onOpenAppInfo
+                onOpenAppInfo = onOpenAppInfo,
+                onBrightnessChanged = onBrightnessChanged,
+                onLockScreenRequested = onLockScreenRequested
             )
         }
     }
@@ -517,7 +526,9 @@ private fun AdminPanelDialog(
     onRequestIgnoreBatteryOptimizations: () -> Unit,
     onOpenBatteryOptimizationSettings: () -> Unit,
     onOpenHomeSettings: () -> Unit,
-    onOpenAppInfo: () -> Unit
+    onOpenAppInfo: () -> Unit,
+    onBrightnessChanged: (Int) -> Unit,
+    onLockScreenRequested: () -> Unit
 ) {
     var domain by remember { mutableStateOf(uiState.configuredUrl) }
     var newPin by remember { mutableStateOf("") }
@@ -712,6 +723,66 @@ private fun AdminPanelDialog(
                 }
             }
             SectionCard(
+                icon = Icons.Rounded.Brightness6,
+                title = "Display",
+                subtitle = "Adjust screen brightness and control the display."
+            ) {
+                var brightnessSlider by remember { mutableStateOf(uiState.brightness.toFloat()) }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Brightness6,
+                        contentDescription = null,
+                        tint = PanelTextSecondary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Slider(
+                        value = brightnessSlider,
+                        onValueChange = { brightnessSlider = it },
+                        onValueChangeFinished = { onBrightnessChanged(brightnessSlider.toInt()) },
+                        valueRange = 5f..100f,
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(horizontal = 8.dp)
+                    )
+                    Text(
+                        text = "${brightnessSlider.toInt()}%",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = PanelTextSecondary
+                    )
+                }
+                if (!uiState.canWriteSettings) {
+                    StatusBanner(
+                        icon = Icons.Rounded.WarningAmber,
+                        text = "Write settings permission is required. Tap below to grant it.",
+                        accent = WarningColor,
+                        tint = WarningSoft
+                    )
+                    Button(
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = onOpenAppInfo,
+                        colors = ButtonDefaults.buttonColors(containerColor = AccentColor)
+                    ) {
+                        Text("Grant permission")
+                    }
+                }
+                OutlinedButton(
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = onLockScreenRequested,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, AccentColor.copy(alpha = 0.34f)),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = PanelSurfaceRaised,
+                        contentColor = AccentColor
+                    )
+                ) {
+                    Icon(imageVector = Icons.Rounded.Lock, contentDescription = null)
+                    Spacer(modifier = Modifier.size(8.dp))
+                    Text("Turn off screen")
+                }
+            }
+            SectionCard(
                 icon = Icons.Rounded.PowerSettingsNew,
                 title = "Admin actions",
                 subtitle = "Refresh the kiosk or leave it temporarily when maintenance is needed."
@@ -866,6 +937,12 @@ private fun KioskWebView(
                 )
 
                 webChromeClient = object : WebChromeClient() {
+                    override fun onPermissionRequest(request: PermissionRequest?) {
+                        // Auto-grant camera (and microphone) so the website can
+                        // use the device camera for QR scanning without prompts.
+                        request?.grant(request.resources)
+                    }
+
                     override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
                         val msg = consoleMessage?.message() ?: "null"
                         val line = consoleMessage?.lineNumber() ?: 0

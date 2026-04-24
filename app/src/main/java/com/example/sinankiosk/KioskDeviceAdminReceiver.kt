@@ -127,6 +127,10 @@ class KioskDevicePolicyController(context: Context) {
         unhideCompetingLaunchers()
     }
 
+    fun lockScreen() {
+        runCatching { devicePolicyManager.lockNow() }
+    }
+
     fun startLockTaskIfPermitted(activity: Activity) {
         if (isLockTaskActive(activity)) {
             return
